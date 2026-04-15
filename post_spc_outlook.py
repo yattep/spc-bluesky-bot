@@ -77,16 +77,20 @@ def fetch_image(url):
     enhancer = ImageEnhance.Color(combined)
     combined = enhancer.enhance(1.6)  # 1.0 is original, increase to taste
 
-    # Fetch state borders overlay
+    # Fetch dark state borders (no city labels)
     borders_url = (
         "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/"
-        "World_Boundaries_and_Places/MapServer/export"
+        "World_Reference_Overlay/MapServer/export"
         "?bbox=-125,24,-66,50&bboxSR=4269&imageSR=4269"
         "&size=1600,1000&format=png&transparent=true&f=image"
     )
     borders_resp = requests.get(borders_url, timeout=15)
     borders_resp.raise_for_status()
     borders_img = Image.open(io.BytesIO(borders_resp.content)).convert("RGBA")
+
+    # Composite borders on top
+    combined = combined.convert("RGBA")
+    combined = Image.alpha_composite(combined, borders_img)
 
     # Composite borders on top
     combined = combined.convert("RGBA")
