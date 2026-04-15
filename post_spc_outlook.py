@@ -110,6 +110,23 @@ def fetch_image(url):
                 draw.polygon(coords, fill=(255, 251, 240, 255))
     del draw
 
+    # Draw lakes
+    lakes_url = "https://naciscdn.org/naturalearth/110m/physical/ne_110m_lakes.zip"
+    lakes_resp = requests.get(lakes_url, timeout=30)
+    lakes_resp.raise_for_status()
+    with zipfile.ZipFile(io.BytesIO(lakes_resp.content)) as z:
+        z.extractall("/tmp/lakes")
+    lakes = gpd.read_file("/tmp/lakes/ne_110m_lakes.shp")
+
+    draw = ImageDraw.Draw(base_img)
+    for geom in lakes.geometry:
+        polys = geom.geoms if geom.geom_type == "MultiPolygon" else [geom]
+        for poly in polys:
+            coords = [geo_to_pixel(lon, lat) for lon, lat in poly.exterior.coords]
+            if len(coords) > 2:
+                draw.polygon(coords, fill=(150, 190, 220, 255))
+    del draw
+
     # Download SPC shapefile
     headers = {"User-Agent": "Mozilla/5.0"}
     shp_resp = requests.get(shp_url, headers=headers, timeout=30)
