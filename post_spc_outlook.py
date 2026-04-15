@@ -10,17 +10,17 @@ BSKY_API = "https://bsky.social/xrpc"
 OUTLOOK_DAYS = [
     {
         "day": 1,
-        "url": "https://www.spc.noaa.gov/products/outlook/day1otlk_cat.gif",
+        "url": "https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/SPC_wx_outlks/MapServer/export?layers=show:1&bbox=-125,24,-66,50&bboxSR=4269&imageSR=4269&size=800,500&format=png&transparent=false&f=image",
         "label": "Day 1",
     },
     {
         "day": 2,
-        "url": "https://www.spc.noaa.gov/products/outlook/day2otlk_cat.gif",
+        "url": "https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/SPC_wx_outlks/MapServer/export?layers=show:8&bbox=-125,24,-66,50&bboxSR=4269&imageSR=4269&size=800,500&format=png&transparent=false&f=image",
         "label": "Day 2",
     },
     {
         "day": 3,
-        "url": "https://www.spc.noaa.gov/products/outlook/day3otlk_cat.gif",
+        "url": "https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/SPC_wx_outlks/MapServer/export?layers=show:15&bbox=-125,24,-66,50&bboxSR=4269&imageSR=4269&size=800,500&format=png&transparent=false&f=image",
         "label": "Day 3",
     },
 ]
@@ -36,7 +36,7 @@ def login():
     return data["accessJwt"], data["did"]
 
 
-def upload_image(token, image_bytes, mime_type="image/gif"):
+def upload_image(token, image_bytes, mime_type="image/png"):
     resp = requests.post(
         f"{BSKY_API}/com.atproto.repo.uploadBlob",
         headers={
