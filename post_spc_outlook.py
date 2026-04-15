@@ -115,6 +115,11 @@ def fetch_image(url):
             draw.line(coords, fill=(40, 40, 40, 255), width=2)
 
     del draw
+    
+    # Convert to RGB PNG for upload
+    output = io.BytesIO()
+    combined.convert("RGB").save(output, format="PNG")
+    return output.getvalue()
 
 def post_to_bluesky(token, did, text, images):
     """images: list of dicts with 'blob' and 'alt' keys"""
