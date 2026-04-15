@@ -70,10 +70,10 @@ def fetch_image(url):
         return (x, y)
 
     # Determine which day this URL is for based on layer ID
-    if "layers=show:1" in url:
+    if "layers=show:1&" in url:
         shp_url = "https://www.spc.noaa.gov/products/outlook/day1otlk-shp.zip"
         day = 1
-    elif "layers=show:9" in url:
+    elif "layers=show:9&" in url:
         shp_url = "https://www.spc.noaa.gov/products/outlook/day2otlk-shp.zip"
         day = 2
     else:
