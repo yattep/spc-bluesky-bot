@@ -25,7 +25,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install requests pillow geopandas
+        run: pip install requests pillow geopandas pyproj
 
       - name: Run bot
         env:
