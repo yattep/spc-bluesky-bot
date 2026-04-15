@@ -91,7 +91,7 @@ def fetch_image(url):
     }
 
     # Create base canvas
-    base_img = Image.new("RGBA", (img_width, img_height), (240, 240, 240, 255))
+    base_img = Image.new("RGBA", (img_width, img_height), (255, 251, 240, 255))
 
     # Draw ocean background
     ocean_url = "https://naciscdn.org/naturalearth/110m/physical/ne_110m_ocean.zip"
@@ -107,7 +107,7 @@ def fetch_image(url):
         for poly in polys:
             coords = [geo_to_pixel(lon, lat) for lon, lat in poly.exterior.coords]
             if len(coords) > 2:
-                draw.polygon(coords, fill=(180, 200, 220, 255))
+                draw.polygon(coords, fill=(150, 190, 220, 255))
     del draw
 
     # Download SPC shapefile
