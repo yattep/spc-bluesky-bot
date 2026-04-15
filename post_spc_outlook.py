@@ -77,30 +77,44 @@ def fetch_image(url):
     enhancer = ImageEnhance.Color(combined)
     combined = enhancer.enhance(1.6)  # 1.0 is original, increase to taste
 
-    # Fetch dark state borders (no city labels)
-    borders_url = (
-        "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/"
-        "World_Reference_Overlay/MapServer/export"
-        "?bbox=-125,24,-66,50&bboxSR=4269&imageSR=4269"
-        "&size=1600,1000&format=png&transparent=true&f=image"
-    )
-    borders_resp = requests.get(borders_url, timeout=15)
-    borders_resp.raise_for_status()
-    borders_img = Image.open(io.BytesIO(borders_resp.content)).convert("RGBA")
+    import io
+    import zipfile
+    import geopandas as gpd
+    from PIL import ImageDraw
 
-    # Composite borders on top
+    # Download Census Bureau state boundaries shapefile
+    shp_url = "https://www2.census.gov/geo/tiger/GENZ2023/shp/cb_2023_us_state_500k.zip"
+    shp_resp = requests.get(shp_url, timeout=30)
+    shp_resp.raise_for_status()
+
+    # Extract and load shapefile
+    with zipfile.ZipFile(io.BytesIO(shp_resp.content)) as z:
+        z.extractall("/tmp/states")
+    states = gpd.read_file("/tmp/states/cb_2023_us_state_500k.shp")
+
+    # Filter to CONUS only
+    states = states[~states["STUSPS"].isin(["AK", "HI", "PR", "VI", "GU", "MP", "AS"])]
+
+    # Map geo coordinates to image pixels
+    bbox_left, bbox_bottom, bbox_right, bbox_top = -125, 24, -66, 50
+    img_width, img_height = 1600, 1000
+
+    def geo_to_pixel(lon, lat):
+        x = (lon - bbox_left) / (bbox_right - bbox_left) * img_width
+        y = (1 - (lat - bbox_bottom) / (bbox_top - bbox_bottom)) * img_height
+        return x, y
+
+    # Draw state borders onto the image
     combined = combined.convert("RGBA")
-    combined = Image.alpha_composite(combined, borders_img)
+    draw = ImageDraw.Draw(combined)
 
-    # Composite borders on top
-    combined = combined.convert("RGBA")
-    combined = Image.alpha_composite(combined, borders_img)
+    for geom in states.geometry:
+        polys = geom.geoms if geom.geom_type == "MultiPolygon" else [geom]
+        for poly in polys:
+            coords = [geo_to_pixel(lon, lat) for lon, lat in poly.exterior.coords]
+            draw.line(coords, fill=(40, 40, 40, 255), width=2)
 
-    # Convert to RGB PNG for upload
-    output = io.BytesIO()
-    combined.convert("RGB").save(output, format="PNG")
-    return output.getvalue()
-
+    del draw
 
 def post_to_bluesky(token, did, text, images):
     """images: list of dicts with 'blob' and 'alt' keys"""
