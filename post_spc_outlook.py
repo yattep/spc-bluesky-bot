@@ -10,17 +10,17 @@ BSKY_API = "https://bsky.social/xrpc"
 OUTLOOK_DAYS = [
     {
         "day": 1,
-        "url": "https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/SPC_wx_outlks/MapServer/export?layers=show:1&bbox=-125,24,-66,50&bboxSR=4269&imageSR=4269&size=800,500&format=png&transparent=false&f=image",
+        "url": "https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/SPC_wx_outlks/MapServer/export?layers=show:1&bbox=-125,24,-66,50&bboxSR=4269&imageSR=4269&size=800,500&format=png&transparent=true&f=image",
         "label": "Day 1",
     },
     {
         "day": 2,
-        "url": "https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/SPC_wx_outlks/MapServer/export?layers=show:8&bbox=-125,24,-66,50&bboxSR=4269&imageSR=4269&size=800,500&format=png&transparent=false&f=image",
+        "url": "https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/SPC_wx_outlks/MapServer/export?layers=show:8&bbox=-125,24,-66,50&bboxSR=4269&imageSR=4269&size=800,500&format=png&transparent=true&f=image",
         "label": "Day 2",
     },
     {
         "day": 3,
-        "url": "https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/SPC_wx_outlks/MapServer/export?layers=show:15&bbox=-125,24,-66,50&bboxSR=4269&imageSR=4269&size=800,500&format=png&transparent=false&f=image",
+        "url": "https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/SPC_wx_outlks/MapServer/export?layers=show:15&bbox=-125,24,-66,50&bboxSR=4269&imageSR=4269&size=800,500&format=png&transparent=true&f=image",
         "label": "Day 3",
     },
 ]
@@ -50,12 +50,32 @@ def upload_image(token, image_bytes, mime_type="image/png"):
 
 
 def fetch_image(url):
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    }
-    resp = requests.get(url, headers=headers, timeout=15)
-    resp.raise_for_status()
-    return resp.content
+    from PIL import Image
+    import io
+
+    # Fetch basemap tiles from ESRI's public light gray basemap
+    basemap_url = (
+        "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/"
+        "World_Light_Gray_Base/MapServer/export"
+        "?bbox=-125,24,-66,50&bboxSR=4269&imageSR=4269"
+        "&size=800,500&format=png&f=image"
+    )
+    base_resp = requests.get(basemap_url, timeout=15)
+    base_resp.raise_for_status()
+    base_img = Image.open(io.BytesIO(base_resp.content)).convert("RGBA")
+
+    # Fetch the outlook overlay (transparent PNG)
+    overlay_resp = requests.get(url, timeout=15)
+    overlay_resp.raise_for_status()
+    overlay_img = Image.open(io.BytesIO(overlay_resp.content)).convert("RGBA")
+
+    # Composite outlook on top of basemap
+    combined = Image.alpha_composite(base_img, overlay_img)
+
+    # Convert to RGB PNG for upload
+    output = io.BytesIO()
+    combined.convert("RGB").save(output, format="PNG")
+    return output.getvalue()
 
 
 def post_to_bluesky(token, did, text, images):
