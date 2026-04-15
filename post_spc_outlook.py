@@ -77,7 +77,6 @@ def fetch_image(url):
     enhancer = ImageEnhance.Color(combined)
     combined = enhancer.enhance(1.6)  # 1.0 is original, increase to taste
 
-    import io
     import zipfile
     import geopandas as gpd
     from PIL import ImageDraw
