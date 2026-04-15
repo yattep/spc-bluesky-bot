@@ -50,7 +50,10 @@ def upload_image(token, image_bytes, mime_type="image/gif"):
 
 
 def fetch_image(url):
-    resp = requests.get(url, timeout=15)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    }
+    resp = requests.get(url, headers=headers, timeout=15)
     resp.raise_for_status()
     return resp.content
 
