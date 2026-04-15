@@ -72,6 +72,26 @@ def fetch_image(url):
     # Composite outlook on top of basemap
     combined = Image.alpha_composite(base_img, overlay_img)
 
+    # Boost color saturation
+    from PIL import ImageEnhance
+    enhancer = ImageEnhance.Color(combined)
+    combined = enhancer.enhance(1.6)  # 1.0 is original, increase to taste
+
+    # Fetch state borders overlay
+    borders_url = (
+        "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/"
+        "World_Boundaries_and_Places/MapServer/export"
+        "?bbox=-125,24,-66,50&bboxSR=4269&imageSR=4269"
+        "&size=1600,1000&format=png&transparent=true&f=image"
+    )
+    borders_resp = requests.get(borders_url, timeout=15)
+    borders_resp.raise_for_status()
+    borders_img = Image.open(io.BytesIO(borders_resp.content)).convert("RGBA")
+
+    # Composite borders on top
+    combined = combined.convert("RGBA")
+    combined = Image.alpha_composite(combined, borders_img)
+
     # Convert to RGB PNG for upload
     output = io.BytesIO()
     combined.convert("RGB").save(output, format="PNG")
