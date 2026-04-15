@@ -91,23 +91,23 @@ def fetch_image(url):
     }
 
     # Create base canvas
-    base_img = Image.new("RGBA", (img_width, img_height), (255, 251, 240, 255))
+    base_img = Image.new("RGBA", (img_width, img_height), (150, 190, 220, 255))
 
-    # Draw ocean background
-    ocean_url = "https://naciscdn.org/naturalearth/110m/physical/ne_110m_ocean.zip"
-    ocean_resp = requests.get(ocean_url, timeout=30)
-    ocean_resp.raise_for_status()
-    with zipfile.ZipFile(io.BytesIO(ocean_resp.content)) as z:
-        z.extractall("/tmp/ocean")
-    ocean = gpd.read_file("/tmp/ocean/ne_110m_ocean.shp")
+    # Draw land masses on top of ocean-colored canvas
+    land_url = "https://naciscdn.org/naturalearth/110m/physical/ne_110m_land.zip"
+    land_resp = requests.get(land_url, timeout=30)
+    land_resp.raise_for_status()
+    with zipfile.ZipFile(io.BytesIO(land_resp.content)) as z:
+        z.extractall("/tmp/land")
+    land = gpd.read_file("/tmp/land/ne_110m_land.shp")
 
     draw = ImageDraw.Draw(base_img)
-    for geom in ocean.geometry:
+    for geom in land.geometry:
         polys = geom.geoms if geom.geom_type == "MultiPolygon" else [geom]
         for poly in polys:
             coords = [geo_to_pixel(lon, lat) for lon, lat in poly.exterior.coords]
             if len(coords) > 2:
-                draw.polygon(coords, fill=(150, 190, 220, 255))
+                draw.polygon(coords, fill=(255, 251, 240, 255))
     del draw
 
     # Download SPC shapefile
