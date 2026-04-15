@@ -98,10 +98,33 @@ def fetch_image(url):
     bbox_left, bbox_bottom, bbox_right, bbox_top = -125, 24, -66, 50
     img_width, img_height = 1600, 1000
 
+    # Reproject states to Web Mercator to match the basemap
+    states = states.to_crs(epsg=3857)
+
+    # Web Mercator bounds for our bbox (-125, 24, -66, 50)
+    from pyproj import Transformer
+    transformer = Transformer.from_crs("epsg:4269", "epsg:3857", always_xy=True)
+    left, bottom = transformer.transform(-125, 24)
+    right, top = transformer.transform(-66, 50)
+
+    img_width, img_height = 1600, 1000
+
     def geo_to_pixel(lon, lat):
-        x = (lon - bbox_left) / (bbox_right - bbox_left) * img_width
-        y = (1 - (lat - bbox_bottom) / (bbox_top - bbox_bottom)) * img_height
+        x = (lon - left) / (right - left) * img_width
+        y = (1 - (lat - bottom) / (top - bottom)) * img_height
         return x, y
+
+    # Draw state borders onto the image
+    combined = combined.convert("RGBA")
+    draw = ImageDraw.Draw(combined)
+
+    for geom in states.geometry:
+        polys = geom.geoms if geom.geom_type == "MultiPolygon" else [geom]
+        for poly in polys:
+            coords = [geo_to_pixel(lon, lat) for lon, lat in poly.exterior.coords]
+            draw.line(coords, fill=(40, 40, 40, 255), width=2)
+
+    del draw
 
     # Draw state borders onto the image
     combined = combined.convert("RGBA")
