@@ -36,17 +36,24 @@ def login():
     return data["accessJwt"], data["did"]
 
 
-def upload_image(token, image_bytes, mime_type="image/png"):
-    resp = requests.post(
-        f"{BSKY_API}/com.atproto.repo.uploadBlob",
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": mime_type,
-        },
-        data=image_bytes,
-    )
-    resp.raise_for_status()
-    return resp.json()["blob"]
+def upload_image(token, image_bytes, mime_type="image/jpeg"):
+    import time
+    for attempt in range(3):
+        resp = requests.post(
+            f"{BSKY_API}/com.atproto.repo.uploadBlob",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": mime_type,
+            },
+            data=image_bytes,
+            timeout=60,
+        )
+        if resp.status_code == 504 and attempt < 2:
+            print(f"Upload timeout, retrying ({attempt + 2}/3)...")
+            time.sleep(5)
+            continue
+        resp.raise_for_status()
+        return resp.json()["blob"]
 
 
 def fetch_image(url):
@@ -136,6 +143,11 @@ def fetch_image(url):
 
     output = io.BytesIO()
     combined.convert("RGB").save(output, format="PNG")
+    
+    # Compress to keep file size manageable for upload
+    output = io.BytesIO()
+    final = combined.convert("RGB")
+    final.save(output, format="JPEG", quality=85, optimize=True)
     return output.getvalue()
 
 def post_to_bluesky(token, did, text, images):
