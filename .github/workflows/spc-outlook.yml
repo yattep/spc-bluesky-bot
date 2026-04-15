@@ -2,10 +2,13 @@ name: Post SPC Outlooks to Bluesky
 
 on:
   schedule:
-    # Morning run at 13:30 UTC (9:30am EDT / 8:30am CDT)
+    #Early morning run at 06:15 UTC (2:15am EDT)
+    #Shortly after 06Z update
+    - cron: "15 6 * * *"   
+    # Morning run at 13:30 UTC (9:30am EDT)
     # Shortly after SPC's morning 13Z update
     - cron: "30 13 * * *"
-    # Afternoon run at 20:30 UTC (4:30pm EDT / 3:30pm CDT)
+    # Afternoon run at 20:30 UTC (4:30pm EDT)
     # Shortly after SPC's afternoon 20Z update
     - cron: "30 20 * * *"
   workflow_dispatch:
