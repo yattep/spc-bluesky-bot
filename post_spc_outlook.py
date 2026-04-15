@@ -54,66 +54,82 @@ def fetch_image(url):
     import io, zipfile
     import geopandas as gpd
     from pyproj import Transformer
-
-    # Web Mercator bounds equivalent to -125,24,-66,50 in lat/lon
-    transformer = Transformer.from_crs("epsg:4326", "epsg:3857", always_xy=True)
-    left, bottom = transformer.transform(-125, 24)
-    right, top = transformer.transform(-66, 50)
-    bbox_3857 = f"{left},{bottom},{right},{top}"
+    import numpy as np
 
     img_width, img_height = 1600, 1000
 
-    # Fetch basemap in Web Mercator
-    basemap_url = (
-        "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/"
-        f"World_Light_Gray_Base/MapServer/export"
-        f"?bbox={bbox_3857}&bboxSR=3857&imageSR=3857"
-        f"&size={img_width},{img_height}&format=png&f=image"
-    )
-    base_resp = requests.get(basemap_url, timeout=15)
-    base_resp.raise_for_status()
-    base_img = Image.open(io.BytesIO(base_resp.content)).convert("RGBA")
+    # Use plain lat/lon (EPSG:4326) throughout — no projection conversion needed
+    bbox_left, bbox_bottom, bbox_right, bbox_top = -125, 24, -66, 50
 
-    # Fetch outlook overlay in Web Mercator
-    # Replace the bboxSR/imageSR in the passed URL
-    overlay_url = url.replace(
-        "bbox=-125,24,-66,50&bboxSR=4269&imageSR=4269",
-        f"bbox={bbox_3857}&bboxSR=3857&imageSR=3857"
-    )
-    overlay_resp = requests.get(overlay_url, timeout=15)
+    def geo_to_pixel(lon, lat):
+        x = (lon - bbox_left) / (bbox_right - bbox_left) * img_width
+        y = (1 - (lat - bbox_bottom) / (bbox_top - bbox_bottom)) * img_height
+        return (x, y)
+
+    # Create light gray base canvas
+    base_img = Image.new("RGBA", (img_width, img_height), (240, 240, 240, 255))
+
+    # Download and draw country/ocean fill from Natural Earth
+    ne_url = "https://naciscdn.org/naturalearth/110m/physical/ne_110m_ocean.zip"
+    ne_resp = requests.get(ne_url, timeout=30)
+    ne_resp.raise_for_status()
+    with zipfile.ZipFile(io.BytesIO(ne_resp.content)) as z:
+        z.extractall("/tmp/ocean")
+    ocean = gpd.read_file("/tmp/ocean/ne_110m_ocean.shp")
+
+    draw = ImageDraw.Draw(base_img)
+    for geom in ocean.geometry:
+        polys = geom.geoms if geom.geom_type == "MultiPolygon" else [geom]
+        for poly in polys:
+            coords = [geo_to_pixel(lon, lat) for lon, lat in poly.exterior.coords]
+            if len(coords) > 2:
+                draw.polygon(coords, fill=(180, 200, 220, 255))
+    del draw
+
+    # Fetch the outlook overlay from NOAA (lat/lon bbox)
+    overlay_resp = requests.get(url, timeout=15)
     overlay_resp.raise_for_status()
     overlay_img = Image.open(io.BytesIO(overlay_resp.content)).convert("RGBA")
 
     # Composite outlook on top of basemap
     combined = Image.alpha_composite(base_img, overlay_img)
 
-    # Boost color saturation
+    # Boost saturation
     enhancer = ImageEnhance.Color(combined)
     combined = enhancer.enhance(1.6)
 
-    # Download and draw state borders in Web Mercator
+    # Download and draw state borders
     shp_url = "https://www2.census.gov/geo/tiger/GENZ2023/shp/cb_2023_us_state_500k.zip"
     shp_resp = requests.get(shp_url, timeout=30)
     shp_resp.raise_for_status()
-
     with zipfile.ZipFile(io.BytesIO(shp_resp.content)) as z:
         z.extractall("/tmp/states")
     states = gpd.read_file("/tmp/states/cb_2023_us_state_500k.shp")
     states = states[~states["STUSPS"].isin(["AK", "HI", "PR", "VI", "GU", "MP", "AS"])]
-    states = states.to_crs(epsg=3857)
 
-    def geo_to_pixel(mx, my):
-        x = (mx - left) / (right - left) * img_width
-        y = (1 - (my - bottom) / (top - bottom)) * img_height
-        return x, y
+    # Download and draw country borders
+    country_url = "https://naciscdn.org/naturalearth/110m/cultural/ne_110m_admin_0_countries.zip"
+    country_resp = requests.get(country_url, timeout=30)
+    country_resp.raise_for_status()
+    with zipfile.ZipFile(io.BytesIO(country_resp.content)) as z:
+        z.extractall("/tmp/countries")
+    countries = gpd.read_file("/tmp/countries/ne_110m_admin_0_countries.shp")
 
     combined = combined.convert("RGBA")
     draw = ImageDraw.Draw(combined)
 
+    # Draw country borders (slightly thicker)
+    for geom in countries.geometry:
+        polys = geom.geoms if geom.geom_type == "MultiPolygon" else [geom]
+        for poly in polys:
+            coords = [geo_to_pixel(lon, lat) for lon, lat in poly.exterior.coords]
+            draw.line(coords, fill=(40, 40, 40, 255), width=3)
+
+    # Draw state borders
     for geom in states.geometry:
         polys = geom.geoms if geom.geom_type == "MultiPolygon" else [geom]
         for poly in polys:
-            coords = [geo_to_pixel(mx, my) for mx, my in poly.exterior.coords]
+            coords = [geo_to_pixel(lon, lat) for lon, lat in poly.exterior.coords]
             draw.line(coords, fill=(40, 40, 40, 255), width=2)
 
     del draw
