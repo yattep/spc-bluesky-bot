@@ -10,17 +10,17 @@ BSKY_API = "https://bsky.social/xrpc"
 OUTLOOK_DAYS = [
     {
         "day": 1,
-        "url": "https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/SPC_wx_outlks/MapServer/export?layers=show:1&bbox=-125,24,-66,50&bboxSR=4269&imageSR=4269&size=800,500&format=png&transparent=true&f=image",
+        "url": "https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/SPC_wx_outlks/MapServer/export?layers=show:1&bbox=-125,24,-66,50&bboxSR=4269&imageSR=4269&size=1600,1000&format=png&transparent=true&f=image",
         "label": "Day 1",
     },
     {
         "day": 2,
-        "url": "https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/SPC_wx_outlks/MapServer/export?layers=show:8&bbox=-125,24,-66,50&bboxSR=4269&imageSR=4269&size=800,500&format=png&transparent=true&f=image",
+        "url": "https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/SPC_wx_outlks/MapServer/export?layers=show:9&bbox=-125,24,-66,50&bboxSR=4269&imageSR=4269&size=1600,1000&format=png&transparent=true&f=image",
         "label": "Day 2",
     },
     {
         "day": 3,
-        "url": "https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/SPC_wx_outlks/MapServer/export?layers=show:15&bbox=-125,24,-66,50&bboxSR=4269&imageSR=4269&size=800,500&format=png&transparent=true&f=image",
+        "url": "https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/SPC_wx_outlks/MapServer/export?layers=show:17&bbox=-125,24,-66,50&bboxSR=4269&imageSR=4269&size=1600,1000&format=png&transparent=true&f=image",
         "label": "Day 3",
     },
 ]
@@ -58,7 +58,7 @@ def fetch_image(url):
         "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/"
         "World_Light_Gray_Base/MapServer/export"
         "?bbox=-125,24,-66,50&bboxSR=4269&imageSR=4269"
-        "&size=800,500&format=png&f=image"
+        "&size=1600,1000&format=png&f=image"
     )
     base_resp = requests.get(basemap_url, timeout=15)
     base_resp.raise_for_status()
