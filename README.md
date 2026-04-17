@@ -1,2 +1,17 @@
-# spc-bluesky-bot
-A bot that polls the NWS SPC RSS feed every 60 seconds for updated daily convective outlooks and posts all 3 daily outlooks when one is updated.
+spc-bluesky-bot
+A Bluesky bot that automatically posts the official NWS Storm Prediction Center (SPC) Day 1, 2, and 3 Convective Outlook maps shortly after they are issued.
+How it works
+The bot polls the SPC Convective Outlook RSS feed every 60 seconds. When a new outlook is published, it downloads the official categorical outlook PNGs directly from SPC and posts all three days together to Bluesky, along with the risk headline from the forecast narrative.
+Running it
+Designed to run as a Docker container. Clone the repo and deploy with Docker Compose:
+bashdocker compose up -d
+Required environment variables:
+
+BSKY_HANDLE — your Bluesky handle
+BSKY_APP_PASSWORD — a Bluesky app password (generate one here)
+
+Optional:
+
+POLL_INTERVAL — seconds between feed checks (default: 60)
+
+State (last-seen pubDates) is persisted to a Docker volume so the bot won't re-post after restarts.
