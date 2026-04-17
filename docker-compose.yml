@@ -1,0 +1,15 @@
+services:
+  spc-bot:
+    build: .
+    container_name: spc-bluesky-bot
+    restart: unless-stopped
+    environment:
+      - BSKY_HANDLE=${BSKY_HANDLE}
+      - BSKY_APP_PASSWORD=${BSKY_APP_PASSWORD}
+      - POLL_INTERVAL=60
+    volumes:
+      - spc-bot-data:/app/data
+    mem_limit: 128m
+
+volumes:
+  spc-bot-data:
