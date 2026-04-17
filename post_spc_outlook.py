@@ -303,7 +303,7 @@ def check_and_post():
         lines.append(headline)
     lines.append("")
     lines.append(f"Updated: {updated_labels}")
-    lines.append("spc.noaa.gov/products/outlook/")
+    lines.append("www.spc.noaa.gov/products/outlook/")
     post_text = "\n".join(lines)
 
     print("  Posting to Bluesky...")
