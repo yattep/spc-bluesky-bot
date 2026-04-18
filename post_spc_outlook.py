@@ -10,7 +10,7 @@ How it works:
        img:  .../day1otlk_2000.png
      For Day 3 the pattern is .../day3otlk.html -> .../day3otlk.png
   3. Track last-seen pubDate per day in feed_state.json. When any day has
-     a new pubDate, download all three current PNGs and post them together.
+     a new pubDate, post ONLY that day's updated image to Bluesky.
   4. Includes the risk headline from the feed's description in the post.
 
 Environment variables:
@@ -42,7 +42,7 @@ BSKY_APP_PASSWORD = os.environ["BSKY_APP_PASSWORD"]
 BSKY_API = "https://bsky.social/xrpc"
 
 RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
-USER_AGENT = "SPCBlueskyBot/4.0 (+https://github.com/yattep/spc-bluesky-bot)"
+USER_AGENT = "SPCBlueskyBot/5.0 (+https://github.com/yattep/spc-bluesky-bot)"
 
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "60"))
 FEED_STATE_PATH = os.environ.get(
@@ -99,8 +99,7 @@ def fetch_feed():
     """Download and parse the SPC convective outlook RSS feed.
 
     Returns dict of {day_number: entry_dict} containing the latest item
-    for each day. entry_dict has keys: pub_date, link, image_url, title,
-    description.
+    for each day currently in the feed.
     """
     resp = requests.get(
         RSS_URL,
@@ -206,6 +205,35 @@ def upload_image(token, image_bytes, mime_type="image/png"):
         return resp.json()["blob"]
 
 
+def build_facets(text):
+    """Build facets (rich-text link metadata) for URLs in the post text.
+
+    Bluesky requires byte-offset ranges to mark links as clickable.
+    """
+    facets = []
+    url_re = re.compile(r"https?://[^\s]+|www\.[^\s]+")
+    text_bytes = text.encode("utf-8")
+
+    for match in url_re.finditer(text):
+        url = match.group(0)
+        # Bluesky needs a proper scheme; prepend https:// for www. links
+        display_url = url
+        actual_url = url if url.startswith("http") else f"https://{url}"
+
+        # Byte offsets (not char offsets)
+        start = len(text[: match.start()].encode("utf-8"))
+        end = start + len(display_url.encode("utf-8"))
+
+        facets.append({
+            "index": {"byteStart": start, "byteEnd": end},
+            "features": [{
+                "$type": "app.bsky.richtext.facet#link",
+                "uri": actual_url,
+            }],
+        })
+    return facets
+
+
 def post_to_bluesky(token, did, text, images):
     embed_images = [{"alt": img["alt"], "image": img["blob"]} for img in images]
     record = {
@@ -217,6 +245,11 @@ def post_to_bluesky(token, did, text, images):
             "images": embed_images,
         },
     }
+
+    facets = build_facets(text)
+    if facets:
+        record["facets"] = facets
+
     resp = requests.post(
         f"{BSKY_API}/com.atproto.repo.createRecord",
         headers={"Authorization": f"Bearer {token}"},
@@ -232,13 +265,70 @@ def post_to_bluesky(token, did, text, images):
 
 
 # ---------------------------------------------------------------------------
+# Post one day
+# ---------------------------------------------------------------------------
+
+def post_day(day, entry, token, did):
+    """Download and post a single day's outlook. Returns True on success."""
+    try:
+        print(f"  Downloading Day {day}: {entry['image_url']}")
+        image_bytes, mime_type = fetch_image(entry["image_url"])
+        print(f"  Uploading Day {day} ({len(image_bytes) // 1024} KB, {mime_type})...")
+        blob = upload_image(token, image_bytes, mime_type=mime_type)
+    except Exception as e:
+        print(f"  Error fetching/uploading Day {day}: {e}")
+        return False
+
+    # Format pubDate in UTC for display (HHMMz)
+    try:
+        pub_dt = datetime.fromisoformat(entry["pub_date"])
+        issue_time = pub_dt.astimezone(timezone.utc).strftime("%H%Mz")
+    except (ValueError, TypeError):
+        issue_time = ""
+
+    headline = extract_risk_headline(entry.get("description", ""))
+
+    # Build post text — lead with "Day X Update" for at-a-glance clarity
+    lines = []
+    if issue_time:
+        lines.append(f"🌪️ Day {day} Outlook Update — {issue_time}")
+    else:
+        lines.append(f"🌪️ Day {day} Outlook Update")
+
+    if headline:
+        # Truncate so we stay under Bluesky's 300-char limit
+        if len(headline) > 200:
+            headline = headline[:197] + "..."
+        lines.append("")
+        lines.append(headline)
+
+    lines.append("")
+    lines.append("www.spc.noaa.gov/products/outlook/")
+    post_text = "\n".join(lines)
+
+    print(f"  Posting Day {day} to Bluesky...")
+    try:
+        result = post_to_bluesky(
+            token,
+            did,
+            post_text,
+            [{"blob": blob, "alt": f"SPC Convective Outlook Day {day} Categorical Map"}],
+        )
+        print(f"  Posted: {result.get('uri', result)}")
+        return True
+    except Exception as e:
+        print(f"  Error posting Day {day}: {e}")
+        return False
+
+
+# ---------------------------------------------------------------------------
 # Main cycle
 # ---------------------------------------------------------------------------
 
 def check_and_post():
-    """Returns True if a post was made."""
+    """Returns True if at least one post was made."""
     state = load_state()
-    last_seen = state.get("last_seen", {})  # {"1": iso_str, "2": ..., "3": ...}
+    last_seen = state.get("last_seen", {})  # {"1": iso_str, ...}
 
     try:
         feed_items = fetch_feed()
@@ -250,73 +340,36 @@ def check_and_post():
         print("  No outlook items found in feed.")
         return False
 
-    # Determine which days have new pubDates
-    updated_days = []
+    # Identify which days actually changed
+    updated = []
     for day in sorted(feed_items.keys()):
         entry = feed_items[day]
         prev = last_seen.get(str(day))
         if prev != entry["pub_date"]:
-            updated_days.append(day)
+            updated.append(day)
             print(f"  Day {day} updated: {entry['pub_date']} (was {prev})")
         else:
             print(f"  Day {day} unchanged ({entry['pub_date']})")
 
-    if not updated_days:
+    if not updated:
         return False
 
-    print(f"Found {len(updated_days)} updated outlook(s) — fetching images...")
-
-    # Download and upload all three days so the post is always a complete set
-    blobs = []
+    # Log in once and post each updated day separately
     token, did = login()
+    posted_any = False
 
-    for day in sorted(feed_items.keys()):
+    for day in updated:
         entry = feed_items[day]
-        try:
-            print(f"  Downloading Day {day}: {entry['image_url']}")
-            image_bytes, mime_type = fetch_image(entry["image_url"])
-            print(f"  Uploading Day {day} ({len(image_bytes) // 1024} KB, {mime_type})...")
-            blob = upload_image(token, image_bytes, mime_type=mime_type)
-            blobs.append({
-                "blob": blob,
-                "alt": f"SPC Convective Outlook Day {day} Categorical Map",
-            })
-        except Exception as e:
-            print(f"  Error processing Day {day}: {e}")
+        if post_day(day, entry, token, did):
+            # Persist this day's new pubDate immediately so a later failure
+            # doesn't cause us to re-post this day on the next cycle
+            last_seen[str(day)] = entry["pub_date"]
+            state["last_seen"] = last_seen
+            state["last_post_utc"] = datetime.now(timezone.utc).isoformat()
+            save_state(state)
+            posted_any = True
 
-    if not blobs:
-        print("  No images uploaded; skipping post.")
-        return False
-
-    # Build post text
-    now_utc = datetime.now(timezone.utc).strftime("%H:%Mz %b %d, %Y")
-    updated_labels = ", ".join(f"Day {d}" for d in sorted(updated_days))
-
-    primary_day = min(updated_days)  # Day 1 is highest priority if present
-    headline = extract_risk_headline(feed_items[primary_day].get("description", ""))
-
-    lines = [f"🌪️ SPC Convective Outlooks — {now_utc}"]
-    if headline:
-        if len(headline) > 180:
-            headline = headline[:177] + "..."
-        lines.append("")
-        lines.append(headline)
-    lines.append("")
-    lines.append(f"Updated: {updated_labels}")
-    lines.append("www.spc.noaa.gov/products/outlook/")
-    post_text = "\n".join(lines)
-
-    print("  Posting to Bluesky...")
-    result = post_to_bluesky(token, did, post_text, blobs)
-    print(f"  Posted: {result.get('uri', result)}")
-
-    # Save state only after successful post
-    state["last_seen"] = {
-        str(day): entry["pub_date"] for day, entry in feed_items.items()
-    }
-    state["last_post_utc"] = datetime.now(timezone.utc).isoformat()
-    save_state(state)
-    return True
+    return posted_any
 
 
 def main():
