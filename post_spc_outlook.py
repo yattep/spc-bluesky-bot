@@ -45,6 +45,9 @@ RSS_URL = "https://www.spc.noaa.gov/products/spcacrss.xml"
 USER_AGENT = "SPCBlueskyBot/5.0 (+https://github.com/yattep/spc-bluesky-bot)"
 
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "60"))
+# Seconds to wait after detecting a feed update before fetching the image,
+# giving SPC's CDN time to propagate the new PNG
+PROPAGATION_DELAY = int(os.environ.get("PROPAGATION_DELAY", "45"))
 FEED_STATE_PATH = os.environ.get(
     "FEED_STATE_PATH",
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "feed_state.json"),
@@ -160,10 +163,22 @@ def extract_risk_headline(description):
 # ---------------------------------------------------------------------------
 
 def fetch_image(url):
-    """Download the outlook PNG and return (bytes, mime_type)."""
+    """Download the outlook PNG and return (bytes, mime_type).
+
+    Bypasses CDN caches via Cache-Control headers and a timestamp query
+    string so we never receive a stale image after an SPC update.
+    """
+    # Cache-busting query string forces CDNs to treat this as a unique URL
+    cache_buster = f"_cb={int(time.time())}"
+    fetch_url = f"{url}{'&' if '?' in url else '?'}{cache_buster}"
+
     resp = requests.get(
-        url,
-        headers={"User-Agent": USER_AGENT},
+        fetch_url,
+        headers={
+            "User-Agent": USER_AGENT,
+            "Cache-Control": "no-cache, no-store, max-age=0",
+            "Pragma": "no-cache",
+        },
         timeout=30,
     )
     resp.raise_for_status()
@@ -353,6 +368,14 @@ def check_and_post():
 
     if not updated:
         return False
+
+    # Wait for SPC's CDN to propagate the new image before fetching
+    if PROPAGATION_DELAY > 0:
+        print(f"  Waiting {PROPAGATION_DELAY}s for image propagation...")
+        for _ in range(PROPAGATION_DELAY):
+            if _shutdown:
+                return False
+            time.sleep(1)
 
     # Log in once and post each updated day separately
     token, did = login()
