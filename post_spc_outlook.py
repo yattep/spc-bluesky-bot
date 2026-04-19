@@ -294,21 +294,25 @@ def post_day(day, entry, token, did):
         print(f"  Error fetching/uploading Day {day}: {e}")
         return False
 
-    # Format pubDate in UTC for display (HHMMz)
+    # Format pubDate in UTC (issue time and date from the feed, not "now")
     try:
-        pub_dt = datetime.fromisoformat(entry["pub_date"])
-        issue_time = pub_dt.astimezone(timezone.utc).strftime("%H%Mz")
+        pub_dt = datetime.fromisoformat(entry["pub_date"]).astimezone(timezone.utc)
+        issue_time = pub_dt.strftime("%H%Mz")
+        issue_date = pub_dt.strftime("%b %d, %Y")
     except (ValueError, TypeError):
         issue_time = ""
+        issue_date = ""
 
     headline = extract_risk_headline(entry.get("description", ""))
 
     # Build post text — lead with "Day X Update" for at-a-glance clarity
     lines = []
-    if issue_time:
-        lines.append(f"🌪️ Day {day} Outlook Update — {issue_time}")
-    else:
-        lines.append(f"🌪️ Day {day} Outlook Update")
+    header = f"🌪️ Day {day} Outlook Update"
+    if issue_time and issue_date:
+        header += f" — {issue_time} {issue_date}"
+    elif issue_time:
+        header += f" — {issue_time}"
+    lines.append(header)
 
     if headline:
         # Truncate so we stay under Bluesky's 300-char limit
