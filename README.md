@@ -4,7 +4,9 @@ A Bluesky bot that automatically posts the official NWS Storm Prediction Center 
 
 ## How it works
 
-The bot polls the [SPC Convective Outlook RSS feed](https://www.spc.noaa.gov/products/spcacrss.xml) every 60 seconds. When a new outlook is published, it downloads the official categorical outlook PNG directly from SPC and posts it to Bluesky, along with the risk headline from the forecast narrative. Each updated day is posted separately so every post corresponds to a single official SPC release.
+The bot polls the [SPC Convective Outlook RSS feed](https://www.spc.noaa.gov/products/spcacrss.xml) every 60 seconds. When a new outlook is published, it downloads the official categorical outlook PNG directly from SPC and posts it to Bluesky, along with the risk headline and issue time from the forecast narrative. Each updated day is posted separately so every post corresponds to a single official SPC release.
+
+Posts are only made when the outlook contains at least a **Marginal risk** of severe thunderstorms. General-thunderstorm-only days and quiet days with no severe risk are silently skipped.
 
 ## Running it
 

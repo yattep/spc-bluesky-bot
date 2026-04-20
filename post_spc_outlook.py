@@ -284,7 +284,17 @@ def post_to_bluesky(token, did, text, images):
 # ---------------------------------------------------------------------------
 
 def post_day(day, entry, token, did):
-    """Download and post a single day's outlook. Returns True on success."""
+    """Download and post a single day's outlook.
+
+    Caller is responsible for ensuring the outlook has a severe risk area;
+    this function always posts.
+
+    Returns one of:
+      "posted"  — successfully posted to Bluesky
+      "failed"  — error during fetch/upload/post; should be retried
+    """
+    headline = extract_risk_headline(entry.get("description", ""))
+
     try:
         print(f"  Downloading Day {day}: {entry['image_url']}")
         image_bytes, mime_type = fetch_image(entry["image_url"])
@@ -292,7 +302,7 @@ def post_day(day, entry, token, did):
         blob = upload_image(token, image_bytes, mime_type=mime_type)
     except Exception as e:
         print(f"  Error fetching/uploading Day {day}: {e}")
-        return False
+        return "failed"
 
     # Format pubDate in UTC (issue time and date from the feed, not "now")
     try:
@@ -302,8 +312,6 @@ def post_day(day, entry, token, did):
     except (ValueError, TypeError):
         issue_time = ""
         issue_date = ""
-
-    headline = extract_risk_headline(entry.get("description", ""))
 
     # Build post text — lead with "Day X Update" for at-a-glance clarity
     lines = []
@@ -334,10 +342,10 @@ def post_day(day, entry, token, did):
             [{"blob": blob, "alt": f"SPC Convective Outlook Day {day} Categorical Map"}],
         )
         print(f"  Posted: {result.get('uri', result)}")
-        return True
+        return "posted"
     except Exception as e:
         print(f"  Error posting Day {day}: {e}")
-        return False
+        return "failed"
 
 
 # ---------------------------------------------------------------------------
@@ -359,18 +367,31 @@ def check_and_post():
         print("  No outlook items found in feed.")
         return False
 
-    # Identify which days actually changed
-    updated = []
+    # Classify each day: unchanged, updated-with-risk, or updated-no-risk
+    postable = []  # days that have a new pubDate AND a severe risk area
+    skippable = []  # days that updated but have no severe risk
     for day in sorted(feed_items.keys()):
         entry = feed_items[day]
         prev = last_seen.get(str(day))
-        if prev != entry["pub_date"]:
-            updated.append(day)
-            print(f"  Day {day} updated: {entry['pub_date']} (was {prev})")
-        else:
+        if prev == entry["pub_date"]:
             print(f"  Day {day} unchanged ({entry['pub_date']})")
+            continue
 
-    if not updated:
+        if extract_risk_headline(entry.get("description", "")):
+            postable.append(day)
+            print(f"  Day {day} updated with risk: {entry['pub_date']} (was {prev})")
+        else:
+            skippable.append(day)
+            print(f"  Day {day} updated, no severe risk — will skip post: {entry['pub_date']}")
+
+    # Record state for skipped days immediately so we don't re-detect them
+    for day in skippable:
+        last_seen[str(day)] = feed_items[day]["pub_date"]
+    if skippable:
+        state["last_seen"] = last_seen
+        save_state(state)
+
+    if not postable:
         return False
 
     # Wait for SPC's CDN to propagate the new image before fetching
@@ -385,9 +406,10 @@ def check_and_post():
     token, did = login()
     posted_any = False
 
-    for day in updated:
+    for day in postable:
         entry = feed_items[day]
-        if post_day(day, entry, token, did):
+        result = post_day(day, entry, token, did)
+        if result == "posted":
             # Persist this day's new pubDate immediately so a later failure
             # doesn't cause us to re-post this day on the next cycle
             last_seen[str(day)] = entry["pub_date"]
@@ -395,6 +417,7 @@ def check_and_post():
             state["last_post_utc"] = datetime.now(timezone.utc).isoformat()
             save_state(state)
             posted_any = True
+        # If "failed", leave state alone so next cycle retries
 
     return posted_any
 
