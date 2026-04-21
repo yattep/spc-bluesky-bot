@@ -326,10 +326,8 @@ def post_day(day, entry, token, did):
         # Truncate so we stay under Bluesky's 300-char limit
         if len(headline) > 200:
             headline = headline[:197] + "..."
-        lines.append("")
         lines.append(headline)
 
-    lines.append("")
     lines.append("www.spc.noaa.gov/products/outlook/")
     post_text = "\n".join(lines)
 
