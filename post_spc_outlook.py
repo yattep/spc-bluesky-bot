@@ -18,15 +18,12 @@ Environment variables:
   BSKY_APP_PASSWORD    — Bluesky app password (required)
   POLL_INTERVAL        — Seconds between feed checks (default: 60)
   FEED_STATE_PATH      — Path to feed state file (default: ./data/feed_state.json)
-  RUN_ONCE             — Set to "1" for single-run mode (for GitHub Actions)
 """
 
-import io
 import json
 import os
 import re
 import signal
-import sys
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -52,7 +49,6 @@ FEED_STATE_PATH = os.environ.get(
     "FEED_STATE_PATH",
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "feed_state.json"),
 )
-RUN_ONCE = os.environ.get("RUN_ONCE", "0") == "1"
 
 # Match links like .../day1otlk.html, .../day1otlk_1300.html, .../day3otlk.html
 DAY_LINK_RE = re.compile(
@@ -156,6 +152,19 @@ def extract_risk_headline(description):
         headline = re.sub(r"\s+", " ", headline)
         return headline
     return None
+  
+def is_corrected(entry):
+    """Return True if the outlook is a correction.
+    SPC flags corrected products by including CORRECTED (or COR) in the
+    feed title or the first line of the narrative.
+    """
+    title = entry.get("title", "")
+    description = entry.get("description", "")
+    # Only check the first ~200 chars of the description so we don't
+    # match the word elsewhere in the narrative
+    head = description[:200]
+    pattern = re.compile(r"\bCORRECTED\b", re.IGNORECASE)
+    return bool(pattern.search(title) or pattern.search(head))
 
 
 # ---------------------------------------------------------------------------
@@ -313,9 +322,11 @@ def post_day(day, entry, token, did):
         issue_time = ""
         issue_date = ""
 
-    # Build post text — lead with "Day X Update" for at-a-glance clarity
+    # Build post text — lead with "Day X Update" for at-a-glance clarity. Check to see
+    # if the outlook is a correction and append correction to the post.
     lines = []
-    header = f"🌪️ Day {day} Outlook Update"
+    correction_tag = " (CORRECTED)" if is_corrected(entry) else ""
+    header = f"🌪️ Day {day} Outlook Update{correction_tag}"
     if issue_time and issue_date:
         header += f" - {issue_time} {issue_date}"
     elif issue_time:
@@ -421,11 +432,6 @@ def check_and_post():
 
 
 def main():
-    if RUN_ONCE:
-        print("Running in single-shot mode...")
-        check_and_post()
-        return
-
     print(f"Starting SPC outlook polling loop (RSS, every {POLL_INTERVAL}s)...")
     print(f"  Feed: {RSS_URL}")
     print(f"  State: {FEED_STATE_PATH}")
