@@ -317,9 +317,9 @@ def post_day(day, entry, token, did):
     lines = []
     header = f"🌪️ Day {day} Outlook Update"
     if issue_time and issue_date:
-        header += f" — {issue_time} {issue_date}"
+        header += f" - {issue_time} {issue_date}"
     elif issue_time:
-        header += f" — {issue_time}"
+        header += f" - {issue_time}"
     lines.append(header)
 
     if headline:
