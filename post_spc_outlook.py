@@ -155,16 +155,16 @@ def extract_risk_headline(description):
   
 def is_corrected(entry):
     """Return True if the outlook is a correction.
-    SPC flags corrected products by including CORRECTED (or COR) in the
-    feed title or the first line of the narrative.
+    SPC flags corrected products with 'CORR' in the product title
+    (e.g. 'Day 1 Convective Outlook CORR 1') and 'CORRECTED FOR...'
+    in the body. Search both the title and full description.
     """
     title = entry.get("title", "")
     description = entry.get("description", "")
-    # Only check the first ~200 chars of the description so we don't
-    # match the word elsewhere in the narrative
-    head = description[:200]
-    pattern = re.compile(r"\bCORRECTED\b", re.IGNORECASE)
-    return bool(pattern.search(title) or pattern.search(head))
+    # \bCORR(ECTED)?\b matches both "CORR 1" (in titles) and "CORRECTED" (in body)
+    # Word boundaries prevent false matches on words like "INCORRECT"
+    pattern = re.compile(r"\bCORR(ECTED)?\b", re.IGNORECASE)
+    return bool(pattern.search(title) or pattern.search(description))
 
 
 # ---------------------------------------------------------------------------
