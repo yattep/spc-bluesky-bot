@@ -236,7 +236,6 @@ def build_facets(text):
     """
     facets = []
     url_re = re.compile(r"https?://[^\s]+|www\.[^\s]+")
-    text_bytes = text.encode("utf-8")
 
     for match in url_re.finditer(text):
         url = match.group(0)
