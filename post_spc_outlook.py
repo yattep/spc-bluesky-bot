@@ -25,6 +25,7 @@ import os
 import re
 import signal
 import time
+import struct
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -194,6 +195,13 @@ def fetch_image(url):
     content_type = resp.headers.get("Content-Type", "image/png").split(";")[0].strip()
     return resp.content, content_type
 
+def get_png_dimensions(data):
+    """Read width and height from PNG header bytes without needing Pillow."""
+    if data[:8] != b'\x89PNG\r\n\x1a\n':
+        return None, None
+    width = struct.unpack('>I', data[16:20])[0]
+    height = struct.unpack('>I', data[20:24])[0]
+    return width, height
 
 # ---------------------------------------------------------------------------
 # Bluesky API
@@ -258,7 +266,16 @@ def build_facets(text):
 
 
 def post_to_bluesky(token, did, text, images):
-    embed_images = [{"alt": img["alt"], "image": img["blob"]} for img in images]
+    embed_images = []
+    for img in images:
+        embed_img = {"image": img["blob"], "alt": img["alt"]}
+        if img.get("width") and img.get("height"):
+            embed_img["aspectRatio"] = {
+                "$type": "app.bsky.embed.images#aspectRatio",
+                "width": img["width"],
+                "height": img["height"],
+            }
+        embed_images.append(embed_img)
     record = {
         "$type": "app.bsky.feed.post",
         "text": text,
@@ -306,7 +323,8 @@ def post_day(day, entry, token, did):
     try:
         print(f"  Downloading Day {day}: {entry['image_url']}")
         image_bytes, mime_type = fetch_image(entry["image_url"])
-        print(f"  Uploading Day {day} ({len(image_bytes) // 1024} KB, {mime_type})...")
+        img_width, img_height = get_png_dimensions(image_bytes)
+        print(f"  Uploading Day {day} ({len(image_bytes) // 1024} KB, {mime_type}, {img_width}x{img_height})...")
         blob = upload_image(token, image_bytes, mime_type=mime_type)
     except Exception as e:
         print(f"  Error fetching/uploading Day {day}: {e}")
@@ -347,7 +365,7 @@ def post_day(day, entry, token, did):
             token,
             did,
             post_text,
-            [{"blob": blob, "alt": f"SPC Convective Outlook Day {day} Categorical Map"}],
+            [{"blob": blob, "alt": f"SPC Convective Outlook Day {day} Categorical Map", "width": img_width, "height": img_height}],
         )
         print(f"  Posted: {result.get('uri', result)}")
         return "posted"
