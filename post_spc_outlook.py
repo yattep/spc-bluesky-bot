@@ -269,12 +269,6 @@ def post_to_bluesky(token, did, text, images):
     embed_images = []
     for img in images:
         embed_img = {"image": img["blob"], "alt": img["alt"]}
-        if img.get("width") and img.get("height"):
-            embed_img["aspectRatio"] = {
-                "$type": "app.bsky.embed.images#aspectRatio",
-                "width": img["width"],
-                "height": img["height"],
-            }
         embed_images.append(embed_img)
     record = {
         "$type": "app.bsky.feed.post",
@@ -327,7 +321,8 @@ def post_day(day, entry, token, did):
         print(f"  Uploading Day {day} ({len(image_bytes) // 1024} KB, {mime_type}, {img_width}x{img_height})...")
         blob = upload_image(token, image_bytes, mime_type=mime_type)
     except Exception as e:
-        print(f"  Error fetching/uploading Day {day}: {e}")
+        detail = getattr(getattr(e, "response", None), "text", "")
+        print(f"  Error posting Day {day}: {e} {detail}")
         return "failed"
 
     # Format pubDate in UTC (issue time and date from the feed, not "now")
